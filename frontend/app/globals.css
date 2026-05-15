@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --editor-bg: #0d1117;
+  --panel-bg: #161b22;
+  --border: #30363d;
+  --text-muted: #8b949e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--editor-bg);
+  color: #e6edf3;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Monaco editor container sizing fix */
+.monaco-container {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+/* Subtle pulse for loading state */
+@keyframes pulse-border {
+  0%, 100% { border-color: #4f6ef7; }
+  50%       { border-color: #7c9fff; }
+}
+.pulse-border {
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
