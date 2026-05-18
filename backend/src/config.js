@@ -11,7 +11,7 @@ export const config = {
   outputDir: path.resolve(process.env.OUTPUT_DIR || path.join(ROOT, 'output')),
   tempDir: path.resolve(process.env.TEMP_DIR || path.join(ROOT, 'temp')),
   maxConcurrentJobs: parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10),
-  maxDurationSeconds: parseInt(process.env.MAX_DURATION_SECONDS || '30', 10),
+  maxDurationSeconds: parseInt(process.env.MAX_DURATION_SECONDS || '60', 10),
   ffmpegPath: process.env.FFMPEG_PATH || null,
 
   render: {

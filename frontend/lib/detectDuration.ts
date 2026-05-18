@@ -9,8 +9,15 @@
  *    Used when the iframe document is not yet accessible.
  */
 
-const MAX_CAP_S = 30;
-const DEFAULT_S  = 5;
+const MAX_CAP_S = 60;
+const DEFAULT_S = 5;
+const MIN_S     = 3; // never return less than 3s for a detected animation
+
+function addBuffer(secs: number): number {
+  // 25% of detected duration, minimum 1s — gives more room for longer animations
+  const buf = Math.max(1, Math.round(secs * 0.25));
+  return Math.min(Math.max(Math.ceil(secs) + buf, MIN_S), MAX_CAP_S);
+}
 
 function parseDurationStr(value: string): number {
   if (!value || value === 'none' || value === '0s') return 0;
@@ -34,8 +41,8 @@ export function detectDurationFromDoc(doc: Document): number {
     try {
       const timing = anim.effect?.getTiming?.();
       if (!timing) return;
-      const dur  = typeof timing.duration   === 'number' ? timing.duration   : 0;
-      const del  = typeof timing.delay      === 'number' ? timing.delay      : 0;
+      const dur  = typeof timing.duration  === 'number' ? timing.duration : 0;
+      const del  = typeof timing.delay     === 'number' ? Math.max(0, timing.delay) : 0;
       const iter = timing.iterations === Infinity         ? 1
                  : typeof timing.iterations === 'number'  ? timing.iterations
                  : 1;
@@ -49,7 +56,7 @@ export function detectDurationFromDoc(doc: Document): number {
       const s = win.getComputedStyle(el as Element);
 
       const animDur  = parseDurationStr(s.animationDuration);
-      const animDel  = parseDurationStr(s.animationDelay);
+      const animDel  = Math.max(0, parseDurationStr(s.animationDelay));
       const iterStr  = s.animationIterationCount;
       const iter     = iterStr === 'infinite' ? 1 : (parseFloat(iterStr) || 1);
       maxMs = Math.max(maxMs, animDel + animDur * iter);
@@ -61,9 +68,7 @@ export function detectDurationFromDoc(doc: Document): number {
   });
 
   const secs = maxMs / 1000;
-  return secs > 0.3
-    ? Math.min(Math.ceil(secs), MAX_CAP_S)
-    : DEFAULT_S;
+  return secs > 0.3 ? addBuffer(secs) : DEFAULT_S;
 }
 
 /** Strategy 2: regex fallback over raw HTML string */
@@ -94,7 +99,5 @@ export function detectDurationFromHTML(html: string): number {
   for (const [, style] of html.matchAll(/style\s*=\s*["']([^"']*)["']/gi)) scanTokens(style);
 
   const secs = maxMs / 1000;
-  return secs > 0.3
-    ? Math.min(Math.ceil(secs), MAX_CAP_S)
-    : DEFAULT_S;
+  return secs > 0.3 ? addBuffer(secs) : DEFAULT_S;
 }

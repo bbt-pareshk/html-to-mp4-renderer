@@ -4,13 +4,37 @@ import { useRef, useState } from 'react';
 import { Download, Play, Pause, RotateCcw } from 'lucide-react';
 
 interface Props {
-  videoUrl: string;      // Full URL including backend origin
+  videoUrl: string;
   filename?: string;
+  width?: number;
+  height?: number;
 }
 
-export default function VideoPlayer({ videoUrl, filename = 'render.mp4' }: Props) {
+export default function VideoPlayer({ videoUrl, filename = 'render.mp4', width = 450, height = 800 }: Props) {
+  const MAX_W = 240;
+  const scale = Math.min(MAX_W / width, 380 / height);
+  const displayWidth  = Math.round(width  * scale);
+  const displayHeight = Math.round(height * scale);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload() {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(videoUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   function togglePlay() {
     const v = videoRef.current;
@@ -40,7 +64,7 @@ export default function VideoPlayer({ videoUrl, filename = 'render.mp4' }: Props
           onPause={() => setPlaying(false)}
           onEnded={() => setPlaying(false)}
           className="block"
-          style={{ width: 225, height: 400 }}   // 0.5× of 450×800
+          style={{ width: displayWidth, height: displayHeight }}
         />
 
         {/* Overlay controls */}
@@ -66,17 +90,24 @@ export default function VideoPlayer({ videoUrl, filename = 'render.mp4' }: Props
       </div>
 
       {/* Download button */}
-      <a
-        href={videoUrl}
-        download={filename}
-        className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors w-full justify-center"
+      <button
+        onClick={handleDownload}
+        disabled={downloading}
+        className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors w-full justify-center"
       >
-        <Download size={16} />
-        Download MP4
-      </a>
+        {downloading ? (
+          <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+        ) : (
+          <Download size={16} />
+        )}
+        {downloading ? 'Downloading…' : 'Download MP4'}
+      </button>
 
       <p className="text-xs text-[#484f58] text-center">
-        450 × 800px · libx264 · yuv420p
+        {width} × {height}px · libx264 · yuv420p
       </p>
     </div>
   );

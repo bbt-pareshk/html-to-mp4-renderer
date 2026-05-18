@@ -13,16 +13,23 @@ const STATUS_LABELS: Record<string, string> = {
   processing: 'Rendering frames…',
   completed:  'Complete',
   failed:     'Render failed',
+  cancelled:  'Cancelled',
 };
 
 export default function ProgressBar({ progress, status, label }: Props) {
   const displayLabel = label ?? STATUS_LABELS[status] ?? status;
-  const isFailed = status === 'failed';
+  const isFailed    = status === 'failed';
+  const isCancelled = status === 'cancelled';
 
   return (
     <div className="w-full">
       <div className="flex justify-between items-center mb-1.5">
-        <span className={clsx('text-xs', isFailed ? 'text-red-400' : 'text-[#8b949e]')}>
+        <span className={clsx(
+          'text-xs',
+          isFailed    ? 'text-red-400'      :
+          isCancelled ? 'text-yellow-500'   :
+                        'text-[#8b949e]',
+        )}>
           {displayLabel}
         </span>
         <span className="text-xs text-[#484f58]">{progress}%</span>
@@ -32,11 +39,10 @@ export default function ProgressBar({ progress, status, label }: Props) {
         <div
           className={clsx(
             'h-full rounded-full transition-all duration-300',
-            isFailed
-              ? 'bg-red-500'
-              : status === 'completed'
-              ? 'bg-green-500'
-              : 'bg-brand-500',
+            isFailed    ? 'bg-red-500'    :
+            isCancelled ? 'bg-yellow-500' :
+            status === 'completed' ? 'bg-green-500' :
+                        'bg-brand-500',
           )}
           style={{ width: `${progress}%` }}
         />

@@ -5,11 +5,13 @@ export interface RenderRequest {
   duration: number;
   fps: number;
   watermark: boolean;
+  width: number;
+  height: number;
 }
 
 export interface RenderJob {
   jobId: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   videoUrl: string | null;
   error: string | null;
@@ -50,14 +52,21 @@ export async function waitForJob(
   jobId: string,
   onUpdate: (job: RenderJob) => void,
   intervalMs = 1000,
+  signal?: AbortSignal,
 ): Promise<RenderJob> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new Error('Cancelled by user')); return; }
+
     const timer = setInterval(async () => {
+      if (signal?.aborted) {
+        clearInterval(timer);
+        reject(new Error('Cancelled by user'));
+        return;
+      }
       try {
         const job = await pollJob(jobId);
         onUpdate(job);
-
-        if (job.status === 'completed' || job.status === 'failed') {
+        if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
           clearInterval(timer);
           if (job.status === 'completed') resolve(job);
           else reject(new Error(job.error ?? 'Render failed'));
@@ -67,7 +76,16 @@ export async function waitForJob(
         reject(err);
       }
     }, intervalMs);
+
+    signal?.addEventListener('abort', () => {
+      clearInterval(timer);
+      reject(new Error('Cancelled by user'));
+    });
   });
+}
+
+export async function cancelRender(jobId: string): Promise<void> {
+  await fetch(`${BACKEND}/api/cancel/${jobId}`, { method: 'POST' }).catch(() => {});
 }
 
 export function videoDownloadUrl(relativeUrl: string): string {

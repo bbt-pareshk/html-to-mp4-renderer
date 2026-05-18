@@ -48,7 +48,7 @@ const RAF_INTERCEPTOR = `
  * @param {(progress: number) => void} onProgress  0–100
  * @returns {Promise<string>} relative URL path to the output video
  */
-export async function renderHTML(renderConfig, onProgress) {
+export async function renderHTML(renderConfig, onProgress, signal = null) {
   const {
     html,
     duration = config.render.defaultDuration,
@@ -126,6 +126,7 @@ export async function renderHTML(renderConfig, onProgress) {
     console.log(`[Render ${jobId}] ${totalFrames} frames @ ${fps}fps, ${clampedDuration}s, ${animationIds.length} CDP animations tracked`);
 
     for (let i = 0; i < totalFrames; i++) {
+      if (signal?.aborted) throw new Error('Render cancelled');
       const currentMs = i * msPerFrame;
 
       // 1. Seek all CDP-tracked animations (most reliable for @keyframes)

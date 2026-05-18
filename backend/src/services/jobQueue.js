@@ -15,7 +15,7 @@ import { config } from '../config.js';
 /**
  * @typedef {Object} Job
  * @property {string} id
- * @property {'queued'|'processing'|'completed'|'failed'} status
+ * @property {'queued'|'processing'|'completed'|'failed'|'cancelled'} status
  * @property {number} progress
  * @property {RenderConfig} config
  * @property {number} createdAt
@@ -32,6 +32,8 @@ class JobQueue extends EventEmitter {
     this.queue = [];
     this.active = 0;
     this.maxConcurrent = config.maxConcurrentJobs;
+    /** @type {Map<string, AbortController>} */
+    this._controllers = new Map();
   }
 
   /**
@@ -64,6 +66,23 @@ class JobQueue extends EventEmitter {
     return this.jobs.get(jobId) || null;
   }
 
+  /** @param {string} jobId */
+  cancel(jobId) {
+    const job = this.jobs.get(jobId);
+    if (!job) return false;
+    if (job.status === 'queued') {
+      const idx = this.queue.indexOf(jobId);
+      if (idx > -1) this.queue.splice(idx, 1);
+      this._update(jobId, { status: 'cancelled', error: 'Cancelled by user' });
+      return true;
+    }
+    if (job.status === 'processing') {
+      this._controllers.get(jobId)?.abort();
+      return true;
+    }
+    return false;
+  }
+
   /** @param {string} jobId @param {Partial<Job>} updates */
   _update(jobId, updates) {
     const job = this.jobs.get(jobId);
@@ -79,28 +98,37 @@ class JobQueue extends EventEmitter {
     this.active++;
     this._update(jobId, { status: 'processing', progress: 0 });
 
+    const controller = new AbortController();
+    this._controllers.set(jobId, controller);
+
     try {
-      // Lazy import to avoid circular deps and allow hot reload in dev
       const { renderHTML } = await import('./renderEngine.js');
       const videoUrl = await renderHTML(
         this.jobs.get(jobId).config,
         (progress) => this._update(jobId, { progress }),
+        controller.signal,
       );
       this._update(jobId, { status: 'completed', progress: 100, videoUrl });
     } catch (err) {
-      console.error(`[Job ${jobId}] Failed:`, err.message);
-      this._update(jobId, { status: 'failed', error: err.message });
+      if (controller.signal.aborted) {
+        this._update(jobId, { status: 'cancelled', error: 'Cancelled by user' });
+      } else {
+        console.error(`[Job ${jobId}] Failed:`, err.message);
+        this._update(jobId, { status: 'failed', error: err.message });
+      }
     } finally {
+      this._controllers.delete(jobId);
       this.active--;
       this._processNext();
     }
   }
 
-  /** Prune completed/failed jobs older than ttlMs (default 1 hour) */
+  /** Prune completed/failed/cancelled jobs older than ttlMs (default 1 hour) */
   pruneOldJobs(ttlMs = 3600_000) {
     const cutoff = Date.now() - ttlMs;
+    const terminal = new Set(['completed', 'failed', 'cancelled']);
     for (const [id, job] of this.jobs) {
-      if ((job.status === 'completed' || job.status === 'failed') && job.createdAt < cutoff) {
+      if (terminal.has(job.status) && job.createdAt < cutoff) {
         this.jobs.delete(id);
       }
     }

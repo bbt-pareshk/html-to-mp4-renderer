@@ -10,14 +10,15 @@ import RenderControls, { type RenderOptions } from '@/components/RenderControls'
 import ProgressBar from '@/components/ProgressBar';
 import VideoPlayer from '@/components/VideoPlayer';
 import { templates } from '@/lib/templates';
-import { submitRender, waitForJob, videoDownloadUrl, type RenderJob } from '@/lib/api';
+import { submitRender, waitForJob, cancelRender, videoDownloadUrl, type RenderJob } from '@/lib/api';
 import { detectDurationFromDoc, detectDurationFromHTML } from '@/lib/detectDuration';
+import { detectSmartSettingsFromDoc, detectSmartSettingsFromHTML } from '@/lib/detectSettings';
 
 const HtmlEditor = dynamic(() => import('@/components/HtmlEditor'), { ssr: false });
 
 type AppState = 'idle' | 'rendering' | 'done' | 'error';
 
-const DEFAULT_HTML = templates[0].html;
+const DEFAULT_HTML = '';
 const DEBOUNCE_MS  = 600;
 
 export default function Home() {
@@ -27,6 +28,8 @@ export default function Home() {
     duration: 5,
     fps: 30,
     watermark: false,
+    width: 450,
+    height: 800,
   });
 
   // Auto-duration state
@@ -41,7 +44,9 @@ export default function Home() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [activeTab, setActiveTab]         = useState<'editor' | 'preview'>('editor');
 
-  const debounceRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeJobRef     = useRef<string | null>(null);
+  const pollAbortRef     = useRef<AbortController | null>(null);
   // Ref forwarded into the right-panel PreviewPanel so we can read its iframe document
   const mainIframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -82,6 +87,27 @@ export default function Home() {
     }
   }
 
+  function handleSmartDetect() {
+    const doc = mainIframeRef.current?.contentDocument;
+    const settings = doc
+      ? detectSmartSettingsFromDoc(doc)
+      : detectSmartSettingsFromHTML(previewHtml);
+
+    setRenderOptions(prev => ({
+      ...prev,
+      width: settings.width,
+      height: settings.height,
+      fps: settings.fps,
+    }));
+
+    // Also enable auto-duration so the full triple is detected
+    setAutoMode(true);
+    const duration = doc
+      ? detectDurationFromDoc(doc)
+      : detectDurationFromHTML(previewHtml);
+    setDetectedDuration(duration);
+  }
+
   function applyTemplate(templateHtml: string) {
     setHtml(templateHtml);
     setPreviewHtml(templateHtml);
@@ -109,14 +135,38 @@ export default function Home() {
         duration: effectiveDuration,
         fps: renderOptions.fps,
         watermark: renderOptions.watermark,
+        width: renderOptions.width,
+        height: renderOptions.height,
       });
-      const result = await waitForJob(jobId, setJob);
+      activeJobRef.current = jobId;
+      const pollAbort = new AbortController();
+      pollAbortRef.current = pollAbort;
+      const result = await waitForJob(jobId, setJob, 1000, pollAbort.signal);
+      pollAbortRef.current = null;
+      activeJobRef.current = null;
       setVideoUrl(videoDownloadUrl(result.videoUrl!));
       setAppState('done');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
-      setAppState('error');
+      activeJobRef.current = null;
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      if (msg === 'Cancelled by user') {
+        setAppState('idle');
+      } else {
+        setErrorMsg(msg);
+        setAppState('error');
+      }
     }
+  }
+
+  async function handleCancel() {
+    // Stop the polling interval immediately so it can't interfere with a new render
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = null;
+    // Tell the backend to kill the job
+    if (activeJobRef.current) cancelRender(activeJobRef.current);
+    activeJobRef.current = null;
+    setAppState('idle');
+    setJob(null);
   }
 
   const isRendering = appState === 'rendering';
@@ -133,7 +183,7 @@ export default function Home() {
             <Film size={18} className="text-brand-500" />
             <span className="font-semibold text-sm tracking-tight">HTML → MP4</span>
           </div>
-          <span className="text-xs text-[#484f58] ml-auto">450 × 800 · Reels format</span>
+          <span className="text-xs text-[#484f58] ml-auto">{renderOptions.width} × {renderOptions.height}</span>
         </div>
 
         {/* Tabs */}
@@ -190,8 +240,8 @@ export default function Home() {
             <HtmlEditor value={html} onChange={handleHtmlChange} />
           </div>
           <div className={clsx('absolute inset-0', activeTab !== 'preview' && 'hidden')}>
-            {/* Left-panel mini preview — no ref needed here */}
-            <PreviewPanel html={previewHtml} />
+            {/* Left-panel mini preview — mirrors the selected canvas size */}
+            <PreviewPanel html={previewHtml} width={renderOptions.width} height={renderOptions.height} />
           </div>
         </div>
 
@@ -203,6 +253,7 @@ export default function Home() {
             autoMode={autoMode}
             detectedDuration={detectedDuration}
             onAutoModeChange={handleAutoModeChange}
+            onSmartDetect={handleSmartDetect}
             disabled={isRendering}
           />
 
@@ -224,35 +275,46 @@ export default function Home() {
             />
           )}
 
-          <button
-            onClick={handleGenerate}
-            disabled={isRendering || !html.trim()}
-            className={clsx(
-              'flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-semibold text-sm transition-all',
-              isRendering
-                ? 'bg-[#21262d] text-[#484f58] cursor-not-allowed'
-                : 'bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-900/40',
-              !html.trim() && 'opacity-40 cursor-not-allowed',
+          <div className="flex gap-2">
+            <button
+              onClick={handleGenerate}
+              disabled={isRendering || !html.trim()}
+              className={clsx(
+                'flex items-center justify-center gap-2 flex-1 py-3.5 rounded-xl font-semibold text-sm transition-all',
+                isRendering
+                  ? 'bg-[#21262d] text-[#484f58] cursor-not-allowed'
+                  : 'bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-900/40',
+                !html.trim() && !isRendering && 'opacity-40 cursor-not-allowed',
+              )}
+            >
+              {isRendering ? (
+                <>
+                  <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Rendering…
+                </>
+              ) : (
+                <>
+                  <Film size={16} />
+                  Generate MP4
+                  {autoMode && detectedDuration !== null && (
+                    <span className="ml-1 text-xs opacity-70">({detectedDuration}s)</span>
+                  )}
+                </>
+              )}
+            </button>
+
+            {isRendering && (
+              <button
+                onClick={handleCancel}
+                className="px-4 py-3.5 rounded-xl font-semibold text-sm bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors"
+              >
+                Cancel
+              </button>
             )}
-          >
-            {isRendering ? (
-              <>
-                <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                Rendering…
-              </>
-            ) : (
-              <>
-                <Film size={16} />
-                Generate MP4
-                {autoMode && detectedDuration !== null && (
-                  <span className="ml-1 text-xs opacity-70">({detectedDuration}s)</span>
-                )}
-              </>
-            )}
-          </button>
+          </div>
         </div>
       </div>
 
@@ -263,6 +325,8 @@ export default function Home() {
           <PreviewPanel
             ref={mainIframeRef}
             html={previewHtml}
+            width={renderOptions.width}
+            height={renderOptions.height}
             onLoad={handlePreviewLoad}
           />
         </div>
@@ -277,7 +341,7 @@ export default function Home() {
 
             <div className="flex-1 flex items-center justify-center p-5">
               {appState === 'done' && videoUrl ? (
-                <VideoPlayer videoUrl={videoUrl} filename="render.mp4" />
+                <VideoPlayer videoUrl={videoUrl} filename="render.mp4" width={renderOptions.width} height={renderOptions.height} />
               ) : (
                 <div className="text-center">
                   <p className="text-red-400 text-sm font-medium mb-2">Render failed</p>

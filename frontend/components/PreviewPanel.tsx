@@ -51,25 +51,33 @@ const PreviewPanel = forwardRef<HTMLIFrameElement, Props>(
           ref={containerRef}
           className="flex-1 flex items-center justify-center overflow-hidden p-4"
         >
-          <div
-            style={{
-              width, height,
-              transform: `scale(${scale})`,
-              transformOrigin: 'center center',
-              flexShrink: 0,
-            }}
-            className="rounded-lg overflow-hidden shadow-2xl border border-[#30363d]"
-          >
-            <iframe
-              ref={iframeRef}
-              key={refreshKey}
-              srcDoc={html}
-              title="HTML Preview"
-              sandbox="allow-scripts allow-same-origin"
-              style={{ width, height, border: 'none', display: 'block' }}
-              onLoad={() => setTimeout(() => onLoad?.(), 600)}
-            />
-          </div>
+          {html.trim() ? (
+            <div
+              style={{
+                width, height,
+                transform: `scale(${scale})`,
+                transformOrigin: 'center center',
+                flexShrink: 0,
+              }}
+              className="rounded-lg overflow-hidden shadow-2xl border border-[#30363d]"
+            >
+              <iframe
+                ref={iframeRef}
+                key={refreshKey}
+                srcDoc={html}
+                title="HTML Preview"
+                sandbox="allow-scripts allow-same-origin"
+                style={{ width, height, border: 'none', display: 'block' }}
+                onLoad={() => setTimeout(() => onLoad?.(), 600)}
+              />
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 text-center select-none">
+              <Monitor size={32} className="text-[#30363d]" />
+              <p className="text-sm text-[#484f58]">Paste your HTML in the editor</p>
+              <p className="text-xs text-[#30363d]">Preview will appear here</p>
+            </div>
+          )}
         </div>
       </div>
     );

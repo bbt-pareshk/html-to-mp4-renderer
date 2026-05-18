@@ -1,12 +1,14 @@
 'use client';
 
-import { Clock, Gauge, Droplets, Wand2 } from 'lucide-react';
+import { Clock, Gauge, Droplets, Wand2, Monitor, Zap } from 'lucide-react';
 import clsx from 'clsx';
 
 export interface RenderOptions {
   duration: number;
   fps: number;
   watermark: boolean;
+  width: number;
+  height: number;
 }
 
 interface Props {
@@ -15,11 +17,21 @@ interface Props {
   autoMode: boolean;
   detectedDuration: number | null;
   onAutoModeChange: (auto: boolean) => void;
+  onSmartDetect?: () => void;
   disabled?: boolean;
 }
 
-const MANUAL_DURATION_PRESETS = [5, 10, 15, 20, 30];
+const RESOLUTION_PRESETS = [
+  { id: 'reels',     label: 'Reels',    width: 450, height: 800, ratio: '9:16' },
+  { id: 'square',    label: 'Square',   width: 500, height: 500, ratio: '1:1'  },
+  { id: 'landscape', label: 'Wide',     width: 800, height: 450, ratio: '16:9' },
+  { id: 'portrait',  label: 'Portrait', width: 480, height: 600, ratio: '4:5'  },
+] as const;
+
+const MANUAL_DURATION_PRESETS = [5, 10, 15, 20, 30, 40, 50, 60];
 const FPS_PRESETS = [15, 24, 30, 60];
+
+export { RESOLUTION_PRESETS };
 
 export default function RenderControls({
   options,
@@ -27,12 +39,55 @@ export default function RenderControls({
   autoMode,
   detectedDuration,
   onAutoModeChange,
+  onSmartDetect,
   disabled,
 }: Props) {
   const set = (patch: Partial<RenderOptions>) => onChange({ ...options, ...patch });
 
   return (
     <div className="flex flex-col gap-4">
+
+      {/* Smart detect — sets canvas, fps, and duration in one click */}
+      <button
+        disabled={disabled}
+        onClick={onSmartDetect}
+        className={clsx(
+          'flex items-center justify-center gap-2 w-full py-2 rounded-lg text-xs font-semibold transition-colors border',
+          disabled
+            ? 'opacity-40 cursor-not-allowed border-[#30363d] text-[#484f58]'
+            : 'border-brand-500/50 text-brand-400 hover:bg-brand-600 hover:text-white hover:border-brand-600',
+        )}
+      >
+        <Zap size={12} />
+        Smart Detect — auto-select canvas, fps &amp; duration
+      </button>
+
+      {/* Canvas Size */}
+      <div>
+        <label className="flex items-center gap-1.5 text-xs font-medium text-[#8b949e] mb-2">
+          <Monitor size={12} />
+          Canvas Size
+        </label>
+        <div className="flex gap-2">
+          {RESOLUTION_PRESETS.map(p => (
+            <button
+              key={p.id}
+              disabled={disabled}
+              onClick={() => set({ width: p.width, height: p.height })}
+              className={clsx(
+                'flex-1 flex flex-col items-center py-1.5 rounded text-xs font-medium transition-colors',
+                options.width === p.width && options.height === p.height
+                  ? 'bg-brand-600 text-white'
+                  : 'bg-[#21262d] text-[#8b949e] hover:text-white hover:bg-[#30363d]',
+                disabled && 'opacity-40 cursor-not-allowed',
+              )}
+            >
+              <span>{p.label}</span>
+              <span className="opacity-60" style={{ fontSize: 10 }}>{p.ratio}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Duration */}
       <div>
@@ -41,13 +96,12 @@ export default function RenderControls({
           Duration
         </label>
 
-        <div className="flex gap-2">
-          {/* Auto button */}
+        <div className="flex gap-1.5 overflow-x-auto">
           <button
             disabled={disabled}
             onClick={() => onAutoModeChange(!autoMode)}
             className={clsx(
-              'flex items-center gap-1 px-2.5 py-1.5 rounded text-sm font-medium transition-colors shrink-0',
+              'flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium transition-colors shrink-0',
               autoMode
                 ? 'bg-brand-600 text-white'
                 : 'bg-[#21262d] text-[#8b949e] hover:text-white hover:bg-[#30363d]',
@@ -58,14 +112,13 @@ export default function RenderControls({
             Auto
           </button>
 
-          {/* Manual presets */}
           {MANUAL_DURATION_PRESETS.map(d => (
             <button
               key={d}
               disabled={disabled}
               onClick={() => { onAutoModeChange(false); set({ duration: d }); }}
               className={clsx(
-                'flex-1 py-1.5 rounded text-sm font-medium transition-colors',
+                'px-2.5 py-1.5 rounded text-xs font-medium transition-colors shrink-0',
                 !autoMode && options.duration === d
                   ? 'bg-brand-600 text-white'
                   : 'bg-[#21262d] text-[#8b949e] hover:text-white hover:bg-[#30363d]',
@@ -77,15 +130,12 @@ export default function RenderControls({
           ))}
         </div>
 
-        {/* Auto detection readout */}
         {autoMode && (
           <div className="mt-2 flex items-center gap-1.5 text-xs">
             {detectedDuration !== null ? (
               <>
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-                <span className="text-green-400 font-medium">
-                  Detected: {detectedDuration}s
-                </span>
+                <span className="text-green-400 font-medium">Detected: {detectedDuration}s</span>
                 <span className="text-[#484f58]">from longest animation</span>
               </>
             ) : (
@@ -155,7 +205,7 @@ export default function RenderControls({
         <div className="flex justify-between">
           <span>Total frames</span>
           <span className="text-[#8b949e]">
-            {(autoMode ? detectedDuration ?? '?' : options.duration)} × {options.fps} ={' '}
+            {autoMode ? detectedDuration ?? '?' : options.duration} × {options.fps} ={' '}
             {autoMode
               ? detectedDuration !== null ? detectedDuration * options.fps : '?'
               : options.duration * options.fps}
@@ -163,7 +213,7 @@ export default function RenderControls({
         </div>
         <div className="flex justify-between">
           <span>Format</span>
-          <span className="text-[#8b949e]">450×800 MP4 (libx264)</span>
+          <span className="text-[#8b949e]">{options.width}×{options.height} MP4 (libx264)</span>
         </div>
       </div>
     </div>

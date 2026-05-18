@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import renderRouter from './routes/render.js';
 import statusRouter from './routes/status.js';
+import cancelRouter from './routes/cancel.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -32,6 +33,7 @@ app.use('/output', express.static(config.outputDir));
 // API routes
 app.use('/api/render', renderRouter);
 app.use('/api/status', statusRouter);
+app.use('/api/cancel', cancelRouter);
 
 // Health check
 app.get('/health', (_req, res) => {
