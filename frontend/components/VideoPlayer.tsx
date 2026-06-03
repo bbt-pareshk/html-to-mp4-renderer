@@ -23,14 +23,21 @@ export default function VideoPlayer({ videoUrl, filename = 'render.mp4', width =
     if (downloading) return;
     setDownloading(true);
     try {
+      // Fetch with explicit response validation so a truncated download throws
+      // rather than silently saving a partial file.
       const res = await fetch(videoUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
+      if (blob.size === 0) throw new Error('Empty response from server');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+    } catch {
+      // Fallback: open in new tab so the browser can download natively
+      window.open(videoUrl, '_blank');
     } finally {
       setDownloading(false);
     }
@@ -60,6 +67,7 @@ export default function VideoPlayer({ videoUrl, filename = 'render.mp4', width =
           src={videoUrl}
           loop
           playsInline
+          crossOrigin="anonymous"
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onEnded={() => setPlaying(false)}

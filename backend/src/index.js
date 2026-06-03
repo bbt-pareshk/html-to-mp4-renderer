@@ -22,7 +22,8 @@ const corsOrigin = process.env.CORS_ORIGIN || config.frontendUrl || '*';
 app.use(cors({
   origin: corsOrigin,
   methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type'],
+  allowedHeaders: ['Content-Type', 'Range'],
+  exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length'],
 }));
 
 app.use(express.json({ limit: '10mb' }));

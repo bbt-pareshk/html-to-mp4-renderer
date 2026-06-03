@@ -159,6 +159,17 @@ export async function renderHTML(renderConfig, onProgress, signal = null) {
 
     await browser.close();
 
+    // Verify all frames were written before handing off to ffmpeg.
+    // If any screenshot silently failed (e.g. disk pressure), ffmpeg would stop
+    // at the first gap and produce a truncated video with no error thrown.
+    const writtenPngs = (await fs.readdir(framesDir)).filter(f => f.endsWith('.png'));
+    if (writtenPngs.length < totalFrames) {
+      throw new Error(
+        `Frame capture incomplete: expected ${totalFrames} frames but only ${writtenPngs.length} were written. ` +
+        `Possible cause: low disk space or Puppeteer crash.`
+      );
+    }
+
     onProgress(82);
     console.log(`[Render ${jobId}] Encoding ${totalFrames} frames to MP4…`);
 

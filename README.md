@@ -123,7 +123,7 @@ Copy `backend/.env.example` to `backend/.env`:
 | `OUTPUT_DIR` | ../output | Where MP4s are stored |
 | `TEMP_DIR` | ../temp | Temp frames directory |
 | `MAX_CONCURRENT_JOBS` | 2 | Parallel render limit |
-| `MAX_DURATION_SECONDS` | 30 | Cap per job |
+| `MAX_DURATION_SECONDS` | 60 | Cap per job |
 | `FFMPEG_PATH` | _(system)_ | Absolute path if not on PATH |
 
 ## How Animations Work
